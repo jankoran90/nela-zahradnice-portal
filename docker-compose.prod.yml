@@ -1,0 +1,18 @@
+# ── Produkce (Hetzner) ──────────────────────────────────────
+# Deploy přes: bash deploy.sh
+# NPM proxy: portal.nelazahradnice.cz → 172.17.0.1:3010
+
+services:
+  portal:
+    build: .
+    container_name: nelazahradnice-portal
+    restart: unless-stopped
+    env_file:
+      - .env.production
+    volumes:
+      - portal_data:/app/data
+    ports:
+      - "3010:3000"
+
+volumes:
+  portal_data:
