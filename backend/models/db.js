@@ -11,6 +11,7 @@ const dataDir = join(__dirname, '..', 'data');
 if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
 
 const db = new sqlite3.Database(dbPath);
+export { db };
 
 // ── Promise wrappery ──────────────────────────────────────
 export function runAsync(sql, params = []) {
