@@ -8,7 +8,7 @@ set -euo pipefail
 PROJECT="nelazahradnice-portal"
 SERVER="root@91.99.76.194"
 SSH_PORT="2200"
-REMOTE_DIR="/opt/projects/$PROJECT"
+REMOTE_DIR="/root/$PROJECT"
 
 # ── 1. Commit & push na GitHub ────────────────────────────
 echo "📦 Připravuji commit..."
