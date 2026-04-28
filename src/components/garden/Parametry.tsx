@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { getParametry, upsertParametr, deleteParametr, getCiselnaRada, updateCiselnaRada } from '../../services/database';
 
 interface Parametr {
   id: string;
@@ -31,55 +32,64 @@ const Parametry = () => {
   const [editRadaRok, setEditRadaRok] = useState<number | null>(null);
   const [editRadaCislo, setEditRadaCislo] = useState('');
 
-  const fetchParametry = () => {
-    fetch('/api/parametry')
-      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
-      .then((data: Parametr[]) => { setParametry(data); setLoading(false); setError(''); })
-      .catch(err => { setError('Chyba při načítání: ' + err.message); setLoading(false); });
+  const fetchParametry = async () => {
+    try {
+      const data = await getParametry();
+      setParametry(data);
+      setLoading(false);
+      setError('');
+    } catch (err: any) {
+      setError('Chyba při načítání: ' + (err.message || 'Neznámá chyba'));
+      setLoading(false);
+    }
   };
 
   useEffect(() => { fetchParametry(); fetchRada(); }, []);
 
-  const fetchRada = () => {
-    fetch('/api/ciselna-rada')
-      .then(res => { if (!res.ok) throw new Error(`HTTP ${res.status}`); return res.json(); })
-      .then((data: CiselnaRada[]) => setRada(data))
-      .catch(() => {});
+  const fetchRada = async () => {
+    try {
+      const data = await getCiselnaRada();
+      setRada(data);
+    } catch {}
   };
 
-  const handleDelete = (id: string) => {
+  const handleDelete = async (id: string) => {
     if (!confirm('Opravdu smazat tento parametr?')) return;
-    fetch(`/api/parametry/${id}`, { method: 'DELETE' })
-      .then(res => { if (!res.ok) throw new Error('Smazání selhalo'); fetchParametry(); })
-      .catch(err => setError(err.message));
+    try {
+      await deleteParametr(id);
+      fetchParametry();
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
 
-  const handleRename = (id: string) => {
+  const handleRename = async (id: string) => {
     if (!editValue.trim()) { setEditId(null); return; }
     const p = parametry.find(x => x.id === id);
     if (!p) return;
-    fetch(`/api/parametry/${id}`, { method: 'DELETE' })
-      .then(() => fetch('/api/parametry', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: `${p.typ}_${editValue.trim()}`, typ: p.typ, hodnota: editValue.trim() }),
-      }))
-      .then(() => { setEditId(null); fetchParametry(); })
-      .catch(err => setError(err.message));
+    try {
+      await deleteParametr(id);
+      await upsertParametr(`${p.typ}_${editValue.trim()}`, p.typ, { hodnota: editValue.trim() });
+      setEditId(null);
+      fetchParametry();
+    } catch (err: any) {
+      setError(err.message);
+    }
   };
 
-  const handleAdd = () => {
+  const handleAdd = async () => {
     if (!novaHodnota.trim()) return;
     setAdding(true);
     const id = `${aktivniTyp}_${novaHodnota.trim()}`;
-    fetch('/api/parametry', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ id, typ: aktivniTyp, hodnota: novaHodnota.trim() }),
-    })
-      .then(res => { if (!res.ok) throw new Error('Přidání selhalo'); setNovaHodnota(''); fetchParametry(); })
-      .catch(err => setError(err.message))
-      .finally(() => setAdding(false));
+    try {
+      await upsertParametr(id, aktivniTyp, { hodnota: novaHodnota.trim() });
+      setNovaHodnota('');
+      fetchParametry();
+    } catch (err: any) {
+      setError(err.message);
+    } finally {
+      setAdding(false);
+    }
   };
 
   if (loading) {
