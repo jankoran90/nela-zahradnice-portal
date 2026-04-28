@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-PROJECT="nelazahradnice-portal"
+PROJECT="nela-zahradnice-portal"
 SERVER="root@91.99.76.194"
 SSH_PORT="2200"
 REMOTE_DIR="/root/$PROJECT"
