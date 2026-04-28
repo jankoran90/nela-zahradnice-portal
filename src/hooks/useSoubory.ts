@@ -1,6 +1,6 @@
 import { useState, useCallback, useEffect } from 'react';
 import { ProjektovySoubor } from '../types/garden';
-import { getSoubory, uploadSoubor, deleteSoubor } from '../services/database';
+import { getSoubory, uploadSoubory, deleteSoubor } from '../services/database';
 
 export function useSoubory(zakazka_id: string) {
   const [soubory, setSoubory] = useState<ProjektovySoubor[]>([]);
@@ -12,10 +12,9 @@ export function useSoubory(zakazka_id: string) {
 
   useEffect(() => { reload(); }, [reload]);
 
-  async function nahrat(file: File, stitek?: string): Promise<ProjektovySoubor> {
-    const result = await uploadSoubor(zakazka_id, file, stitek);
+  async function nahrat(file: File, stitek?: string): Promise<void> {
+    await uploadSoubory(zakazka_id, file, stitek);
     await reload();
-    return result;
   }
 
   async function smazat(id: string): Promise<void> {

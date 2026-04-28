@@ -1,7 +1,7 @@
 import { useState, useRef } from 'react';
 import { ProjektovySoubor, STITKY_SOUBORU } from '../../types/garden';
 import { useSoubory } from '../../hooks/useSoubory';
-import { souborUrl } from '../../services/database';
+import { getSouborUrl } from '../../services/database';
 
 interface Props {
   zakazka_id: string;
@@ -119,7 +119,7 @@ export function ProjektySekce({ zakazka_id }: Props) {
           {obrazky.map(s => (
             <div key={s.id} className="relative group">
               <img
-                src={souborUrl(s.id)}
+                src={getSouborUrl(s.id)}
                 alt={s.nazev}
                 onClick={() => setLightbox(s.id)}
                 className="w-full aspect-square object-cover rounded-xl cursor-pointer border border-gray-200 hover:opacity-90 transition-opacity"
@@ -138,7 +138,7 @@ export function ProjektySekce({ zakazka_id }: Props) {
         if (!s) return null;
         return (
           <div className="fixed inset-0 bg-black/80 z-50 flex items-center justify-center p-4" onClick={() => setLightbox(null)}>
-            <img src={souborUrl(s.id)} alt={s.nazev} className="max-w-full max-h-full rounded-xl" />
+            <img src={getSouborUrl(s.id)} alt={s.nazev} className="max-w-full max-h-full rounded-xl" />
             <button className="absolute top-4 right-4 text-white text-2xl hover:text-gray-300">✕</button>
           </div>
         );
@@ -156,7 +156,7 @@ export function ProjektySekce({ zakazka_id }: Props) {
                 <div key={s.id} className="flex items-center gap-3 bg-white border border-gray-200 rounded-xl p-3 hover:border-green-300 transition-colors relative">
                   {/* Náhled nebo ikona */}
                   {jeObrazek ? (
-                    <img src={souborUrl(s.id)} alt={s.nazev}
+                    <img src={getSouborUrl(s.id)} alt={s.nazev}
                       className="w-12 h-12 object-cover rounded-lg shrink-0 cursor-pointer"
                       onClick={() => setLightbox(s.id)} />
                   ) : (
@@ -166,7 +166,7 @@ export function ProjektySekce({ zakazka_id }: Props) {
                   )}
                   {/* Info */}
                   <div className="flex-1 min-w-0">
-                    <a href={souborUrl(s.id)} target="_blank" rel="noopener"
+                    <a href={getSouborUrl(s.id)} target="_blank" rel="noopener"
                       className="text-sm font-medium text-gray-800 hover:text-green-600 truncate block">
                       {s.nazev}
                     </a>
@@ -184,7 +184,7 @@ export function ProjektySekce({ zakazka_id }: Props) {
                       <div className="fixed inset-0 z-40" onClick={() => setMenuSoubor(null)} />
                       <div className="fixed z-50 bg-white border border-gray-200 rounded-xl shadow-lg py-1 min-w-[180px]"
                         style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}>
-                        <a href={souborUrl(s.id)} download={s.nazev}
+                        <a href={getSouborUrl(s.id)} download={s.nazev}
                           className="block px-3 py-1.5 text-xs hover:bg-gray-50">💾 Stáhnout</a>
                         <div className="border-t border-gray-100 my-1" />
                         <div className="px-3 py-1 text-xs text-gray-400 font-medium">Štítek</div>

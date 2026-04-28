@@ -1,6 +1,5 @@
 import 'dotenv/config';
 import express from 'express';
-import sqlite3 from 'sqlite3';
 import cors from 'cors';
 import multer from 'multer';
 import { dirname, join } from 'path';
@@ -8,13 +7,13 @@ import { fileURLToPath } from 'url';
 import { existsSync, mkdirSync, unlinkSync } from 'fs';
 import { randomUUID } from 'crypto';
 import { generateFakturaPdf } from './pdf-generator.js';
+import { initDb, db, runAsync, getAsync, allAsync } from './models/db.js';
+import { authenticate, requireMajitel } from './middleware/auth.js';
+import authRoutes from './routes/auth.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const app = express();
-const dbPath = join(__dirname, 'data', 'nela.db');
-const dataDir = join(__dirname, 'data');
-const projektyDir = join(dataDir, 'projekty');
-const db = new sqlite3.Database(dbPath);
+const projektyDir = join(__dirname, 'data', 'projekty');
 
 app.use(cors());
 app.use(express.json({ limit: '50mb' }));
@@ -37,104 +36,16 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage, limits: { fileSize: 20 * 1024 * 1024 } });
 
-// ── DB: tabulky + migrace ─────────────────────────────────
-db.serialize(() => {
-  db.run(`CREATE TABLE IF NOT EXISTS uzivatele (
-    id TEXT PRIMARY KEY, email TEXT, jmeno TEXT, role TEXT,
-    heslo_hash TEXT, token TEXT, token_pouzit INTEGER, datum_vytvoreni TEXT
-  )`);
+// ── Auth routes (login, aktivace, profil – nevyžadují authenticate) ──
+app.use('/api/auth', authRoutes);
 
-  db.run(`CREATE TABLE IF NOT EXISTS polozka_historie (id INTEGER PRIMARY KEY AUTOINCREMENT, typ TEXT CHECK(typ IN ('kategorie', 'nazev')), hodnota TEXT NOT NULL, datum TEXT NOT NULL, puvod TEXT CHECK(puvod IN ('system', 'uzivatel')), UNIQUE(typ, hodnota))`);
-  db.run(`CREATE INDEX IF NOT EXISTS idx_polozka_historie_datum ON polozka_historie (datum)`);
+// ── Middleware: autentizace na všechny API endpointy (kromě auth) ──
+app.use('/api', authenticate);
 
-  db.run(`CREATE TABLE IF NOT EXISTS zakazky (
-    id TEXT PRIMARY KEY, data TEXT
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS zpravy (
-    id TEXT PRIMARY KEY, zakazka_id TEXT, autor_id TEXT,
-    autor_jmeno TEXT DEFAULT '', autor_role TEXT DEFAULT '',
-    text TEXT DEFAULT '', prilohy TEXT DEFAULT '[]',
-    datum TEXT, precteno INTEGER DEFAULT 0,
-    stitek TEXT DEFAULT NULL, pinned INTEGER DEFAULT 0
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS soubory (
-    id TEXT PRIMARY KEY, zakazka_id TEXT,
-    nazev TEXT, typ TEXT, velikost INTEGER,
-    stitek TEXT DEFAULT NULL, cesta TEXT,
-    datum_nahrani TEXT
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS faktury (
-    id TEXT PRIMARY KEY,
-    cislo TEXT UNIQUE NOT NULL,
-    zakazka_id TEXT NOT NULL,
-    typ TEXT NOT NULL CHECK(typ IN ('zalohova', 'konecna', 'dobropis')),
-    stav TEXT NOT NULL DEFAULT 'vystavena' CHECK(stav IN ('vystavena', 'odeslana', 'zaplacena', 'stornovana')),
-    datum_vystaveni TEXT NOT NULL,
-    datum_splatnosti TEXT NOT NULL,
-    datum_zaplaceni TEXT,
-    variabilni_symbol TEXT,
-    castka_celkem REAL NOT NULL DEFAULT 0,
-    poznamka TEXT DEFAULT '',
-    dodavatel TEXT DEFAULT '{}',
-    odberatel TEXT DEFAULT '{}',
-    polozky TEXT DEFAULT '[]',
-    datum_vytvoreni TEXT NOT NULL,
-    datum_aktualizace TEXT NOT NULL
-  )`);
-
-  db.run(`CREATE TABLE IF NOT EXISTS ciselna_rada (
-    rok INTEGER PRIMARY KEY,
-    posledni_cislo INTEGER DEFAULT 0
-  )`);
-
-  // Migrace: přidání chybějících sloupců do staré tabulky zpravy
-  const migCols = [
-    'autor_jmeno TEXT DEFAULT \'\'',
-    'autor_role TEXT DEFAULT \'\'',
-    'prilohy TEXT DEFAULT \'[]\'',
-    'precteno INTEGER DEFAULT 0',
-    'stitek TEXT DEFAULT NULL',
-    'pinned INTEGER DEFAULT 0',
-  ];
-  migCols.forEach(col => {
-    db.run(`ALTER TABLE zpravy ADD COLUMN ${col}`, () => {});
-  });
-
-  // Seed: výchozí admin
-  db.get("SELECT COUNT(*) as cnt FROM uzivatele", [], (err, row) => {
-    if (!err && row.cnt === 0) {
-      db.run(
-        "INSERT INTO uzivatele (id,email,jmeno,role,heslo_hash,token_pouzit,datum_vytvoreni) VALUES (?,?,?,?,?,?,?)",
-        ['nela1', 'nela@zahradnice.cz', 'Nela', 'majitel', 'nela2024', 1, new Date().toISOString()]
-      );
-      console.log('Seed: vytvořen výchozí uživatel nela@zahradnice.cz');
-    }
-  });
-
-  db.run(`CREATE TABLE IF NOT EXISTS parametry (id TEXT PRIMARY KEY, typ TEXT, data TEXT)`, (err) => {
-    if (!err) {
-      db.get("SELECT COUNT(*) as cnt FROM parametry", [], (e, row) => {
-        if (!e && row.cnt === 0) {
-          db.all("SELECT typ, hodnota FROM polozka_historie", [], (e2, rows) => {
-            if (!e2 && rows.length > 0) {
-              const stmt = db.prepare("INSERT OR IGNORE INTO parametry (id, typ, data) VALUES (?, ?, ?)");
-              rows.forEach(r => {
-                stmt.run(`${r.typ}_${r.hodnota}`, r.typ, JSON.stringify({ hodnota: r.hodnota }));
-              });
-              stmt.finalize();
-              console.log(`Seed: vloženo ${rows.length} parametrů z polozka_historie`);
-            }
-          });
-        }
-      });
-    }
-  });
+// ── Inicializace DB (tabulky + seed s bcrypt) ─────────────
+initDb().then(() => {
+  console.log('✅ DB ready');
 });
-
-
 
 // ── Parametry ──────────────────────────────────────────────
 app.get('/api/parametry', (req, res) => {
@@ -172,30 +83,46 @@ app.delete('/api/parametry/:id', (req, res) => {
 });
 
 // ── Uživatelé ─────────────────────────────────────────────
-app.get('/api/uzivatele', (req, res) => {
-  db.all("SELECT * FROM uzivatele", [], (err, rows) => res.json(rows));
+app.get('/api/uzivatele', requireMajitel, (req, res) => {
+  db.all("SELECT * FROM uzivatele", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    // Nevracíme heslo_hash ani v seznamu
+    res.json(rows.map(u => ({
+      id: u.id, email: u.email, jmeno: u.jmeno, role: u.role,
+      token: u.token, token_pouzit: !!u.token_pouzit, datum_vytvoreni: u.datum_vytvoreni,
+    })));
+  });
 });
 
-app.post('/api/uzivatele', (req, res) => {
+app.post('/api/uzivatele', requireMajitel, (req, res) => {
   const { id, email, jmeno, role, heslo_hash, token, token_pouzit, datum_vytvoreni } = req.body;
+  const hash = heslo_hash || '';
   db.run(
-    "INSERT OR REPLACE INTO uzivatele VALUES (?,?,?,?,?,?,?,?)",
-    [id, email, jmeno, role, heslo_hash, token, token_pouzit ? 1 : 0, datum_vytvoreni],
+    "INSERT OR REPLACE INTO uzivatele (id, email, jmeno, role, heslo_hash, token, token_pouzit, datum_vytvoreni) VALUES (?,?,?,?,?,?,?,?)",
+    [id, email, jmeno, role, hash, token, token_pouzit ? 1 : 0, datum_vytvoreni],
     () => res.sendStatus(200)
   );
 });
 
 // ── Zakázky ───────────────────────────────────────────────
 app.get('/api/zakazky', (req, res) => {
-  db.all("SELECT * FROM zakazky", [], (err, rows) => res.json(rows.map(r => JSON.parse(r.data))));
+  db.all("SELECT * FROM zakazky", [], (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    let vse = rows.map(r => JSON.parse(r.data));
+    // Zákazník vidí jen svoje zakázky
+    if (req.uzivatel.role === 'zakaznik') {
+      vse = vse.filter(z => z.zakaznik_email?.toLowerCase() === req.uzivatel.email.toLowerCase());
+    }
+    res.json(vse);
+  });
 });
 
-app.post('/api/zakazky', (req, res) => {
+app.post('/api/zakazky', requireMajitel, (req, res) => {
   const { id } = req.body;
   db.run("INSERT OR REPLACE INTO zakazky VALUES (?,?)", [id, JSON.stringify(req.body)], () => res.sendStatus(200));
 });
 
-app.delete('/api/zakazky/:id', (req, res) => {
+app.delete('/api/zakazky/:id', requireMajitel, (req, res) => {
   db.run("DELETE FROM zakazky WHERE id = ?", [req.params.id], () => res.sendStatus(200));
 });
 
