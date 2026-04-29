@@ -55,6 +55,34 @@ app.get('/api/parametry', (req, res) => {
   });
 });
 
+// ── Parametry: našeptávač (MUSÍ být před :typ route) ──────
+app.get('/api/parametry/:typ/search', (req, res) => {
+  const { typ } = req.params;
+  const q = (req.query.q || '').trim();
+  if (!['kategorie', 'nazev'].includes(typ)) {
+    return res.status(400).json({ error: 'Neplatný typ parametru' });
+  }
+
+  let sql = 'SELECT * FROM parametry WHERE typ = ?';
+  const params = [typ];
+
+  if (q.length >= 1) {
+    sql += ' AND data LIKE ?';
+    params.push(`%${q}%`);
+  }
+
+  sql += ' ORDER BY id LIMIT 10';
+
+  db.all(sql, params, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+    const results = rows.map(r => {
+      const parsed = JSON.parse(r.data || '{}');
+      return parsed.hodnota || r.id;
+    });
+    res.json(results);
+  });
+});
+
 app.get('/api/parametry/:typ', (req, res) => {
   db.all("SELECT * FROM parametry WHERE typ = ?", [req.params.typ], (err, rows) => {
     if (err) return res.status(500).json({ error: err.message });
@@ -152,18 +180,27 @@ app.get('/api/history/:type', (req, res) => {
 });
 
 app.post('/api/history', (req, res) => {
-  console.log('Ukládám do historie:', req.body);
   const { type, value } = req.body;
 
   if (!type || !value || !['kategorie', 'nazev'].includes(type)) {
     return res.status(400).json({ error: 'Chybí typ nebo hodnota' });
   }
 
-  const stmt = `INSERT INTO polozka_historie (typ, hodnota, datum, puvod) VALUES (?, ?, ?, 'uzivatel') ON CONFLICT(typ, hodnota) DO UPDATE SET datum=excluded.datum`;
-  db.run(stmt, [type, value, new Date().toISOString()], (err) => {
-    if (err) return res.status(500).json({ error: err.message });
-    res.sendStatus(201);
-  });
+  const trimmed = value.trim();
+  if (!trimmed) return res.status(400).json({ error: 'Prázdná hodnota' });
+
+  // Vytvoř ID ve formátu typ_hodnota (stejná konvence jako Parametry.tsx)
+  const paramId = `${type}_${trimmed}`;
+
+  // INSERT OR IGNORE — pokud už parametr existuje, necháme původní
+  db.run(
+    "INSERT OR IGNORE INTO parametry (id, typ, data) VALUES (?, ?, ?)",
+    [paramId, type, JSON.stringify({ hodnota: trimmed })],
+    (err) => {
+      if (err) return res.status(500).json({ error: err.message });
+      res.sendStatus(201);
+    }
+  );
 });
 
 // ── Zprávy ────────────────────────────────────────────────

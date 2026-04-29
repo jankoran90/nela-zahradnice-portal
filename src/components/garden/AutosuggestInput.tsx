@@ -1,7 +1,5 @@
-
 import { useState, useEffect, useRef } from 'react';
-
-const API_URL = import.meta.env.VITE_API_URL || '';
+import { searchParametry } from '../../services/database';
 
 interface Props {
   type: 'kategorie' | 'nazev';
@@ -17,15 +15,14 @@ export function AutosuggestInput({ type, value, onChange, className, placeholder
   const inputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
-    if (value.length < 2) {
+    if (value.length < 1) {
       setSuggestions([]);
       setShowSuggestions(false);
       return;
     }
 
     const timer = setTimeout(() => {
-      fetch(`${API_URL}/api/history/${type}?q=${value}`)
-        .then(res => res.json())
+      searchParametry(type, value)
         .then(data => {
           if (Array.isArray(data)) {
             setSuggestions(data);
@@ -33,7 +30,7 @@ export function AutosuggestInput({ type, value, onChange, className, placeholder
           }
         })
         .catch(() => { /* tichá chyba */ });
-    }, 300); // Debounce
+    }, 200);
 
     return () => clearTimeout(timer);
   }, [value, type]);
@@ -44,7 +41,6 @@ export function AutosuggestInput({ type, value, onChange, className, placeholder
   }
 
   function handleBlur() {
-    // Timeout, aby stihl proběhnout click na návrh
     setTimeout(() => setShowSuggestions(false), 200);
   }
 
@@ -55,19 +51,19 @@ export function AutosuggestInput({ type, value, onChange, className, placeholder
         type="text"
         value={value}
         onChange={e => onChange(e.target.value)}
-        onFocus={() => value.length > 1 && suggestions.length > 0 && setShowSuggestions(true)}
+        onFocus={() => value.length > 0 && suggestions.length > 0 && setShowSuggestions(true)}
         onBlur={handleBlur}
         className={className}
         placeholder={placeholder}
         autoComplete="off"
       />
       {showSuggestions && (
-        <ul className="absolute z-10 w-full bg-white border border-gray-300 rounded-md mt-1 max-h-48 overflow-y-auto shadow-lg">
-          {suggestions.map(s => (
+        <ul className="absolute z-50 w-full bg-white border border-gray-200 rounded-lg shadow-lg mt-1 max-h-48 overflow-y-auto">
+          {suggestions.map((s, i) => (
             <li
-              key={s}
+              key={i}
               onMouseDown={() => handleSelect(s)}
-              className="px-4 py-2 cursor-pointer hover:bg-gray-100"
+              className="px-3 py-2 text-sm cursor-pointer hover:bg-green-50 hover:text-green-800 transition-colors"
             >
               {s}
             </li>

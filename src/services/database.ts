@@ -206,7 +206,13 @@ export async function deleteParametr(id: string): Promise<void> {
   await authFetch(`${API_BASE}/parametry/${id}`, { method: 'DELETE' });
 }
 
-// ── Číselná řada ──────────────────────────────────────────
+// ── Parametry: našeptávač ─────────────────────────────────
+export async function searchParametry(typ: 'kategorie' | 'nazev', q: string): Promise<string[]> {
+  if (!q || q.length < 1) return [];
+  const res = await authFetch(`${API_BASE}/parametry/${typ}/search?q=${encodeURIComponent(q)}`);
+  if (!res.ok) return [];
+  return res.json();
+}
 export async function getCiselnaRada(): Promise<{ rok: number; posledni_cislo: number }[]> {
   const res = await authFetch(`${API_BASE}/ciselna-rada`);
   if (!res.ok) return [];

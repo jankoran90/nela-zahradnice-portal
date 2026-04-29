@@ -1,9 +1,7 @@
 import { useState } from 'react';
 import { PolozkaCeny } from '../../types/garden';
-import { generateId } from '../../services/database';
+import { generateId, saveHistory } from '../../services/database';
 import { AutosuggestInput } from './AutosuggestInput';
-
-const API_URL = import.meta.env.VITE_API_URL || '';
 
 const CELOCISELNE_JEDNOTKY = new Set(['ks', 'den', 'hod', 'paušál', 'bal', 'vůz']);
 
@@ -58,17 +56,9 @@ export function PridatPolozku({ onPridat, onZavrit }: Props) {
 
     onPridat(polozka);
 
-    fetch(`${API_URL}/api/history`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'kategorie', value: polozka.kategorie }),
-    }).catch(() => {});
-
-    fetch(`${API_URL}/api/history`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ type: 'nazev', value: polozka.nazev }),
-    }).catch(() => {});
+    // Auto-sync kategorie a název do parametrů (pro našeptávač)
+    saveHistory('kategorie', polozka.kategorie);
+    saveHistory('nazev', polozka.nazev);
   }
 
   return (
